@@ -103,8 +103,8 @@ export default async function handler(req, res) {
 
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // TELEGRAM WEBHOOK INCOMING
-  if (req.method === 'POST' && req.body && req.body.message) {
+  // TELEGRAM WEBHOOK INCOMING (Distinguish from client chat POST)
+  if (req.method === 'POST' && req.body && req.body.update_id && typeof req.body.message === 'object') {
     const tgMsg = req.body.message;
     const threadId = tgMsg.message_thread_id;
     const text = tgMsg.text;
