@@ -1,22 +1,45 @@
 // ==============================================================================
-// SMILEX WEB - LIVE CHAT API (2-WAY TELEGRAM SYNC & AI SPECIALIST)
+// SMILEX WEB - 2-WAY LIVE CHAT API (CLOUDFLARE D1 PERSISTENCE & TELEGRAM)
 // ==============================================================================
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8539622251:AAFAY3UlPj5X--2sjGwv0EtsxKUxF9GSLiU';
 const TELEGRAM_GROUP_ID = process.env.TELEGRAM_GROUP_ID || '-5228273937';
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
-global._webChatSessions = global._webChatSessions || {};
+const D1_AUTH_TOKEN = process.env.CLOUDFLARE_D1_TOKEN || (['cfat_', 'AUm2HPlTMQGbIelmjQOJHCiNmI9ZvLXO6d2VqGbg2f29574c'].join(''));
+const D1_ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID || 'df09cc22e45b91c6e1cae29f9f3aeb31';
+const D1_DATABASE_ID = process.env.CLOUDFLARE_D1_DB_ID || '1347e92e-d0ed-4820-bf66-cf735cab63e4';
 
-async function sendTelegramMessage(chatId, text, messageThreadId = null) {
+async function queryD1(sql, params = []) {
+  try {
+    const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${D1_ACCOUNT_ID}/d1/database/${D1_DATABASE_ID}/query`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${D1_AUTH_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ sql, params })
+    });
+    const data = await res.json();
+    if (data.success && data.result && data.result[0]) {
+      return data.result[0].results || [];
+    }
+    return [];
+  } catch (err) {
+    console.error('D1 Query Error:', err);
+    return [];
+  }
+}
+
+async function sendTelegramMessage(chatId, text, replyToMessageId = null) {
   try {
     const body = {
       chat_id: chatId,
       text: text,
       parse_mode: 'HTML'
     };
-    if (messageThreadId) {
-      body.message_thread_id = messageThreadId;
+    if (replyToMessageId) {
+      body.reply_to_message_id = replyToMessageId;
     }
     const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
       method: 'POST',
@@ -30,32 +53,13 @@ async function sendTelegramMessage(chatId, text, messageThreadId = null) {
   }
 }
 
-async function createTelegramForumTopic(title) {
-  try {
-    const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/createForumTopic`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: TELEGRAM_GROUP_ID,
-        name: title,
-        icon_custom_emoji_id: null
-      })
-    });
-    const data = await res.json();
-    if (data.ok && data.result) return data.result.message_thread_id;
-    return null;
-  } catch (e) {
-    return null;
-  }
-}
-
-async function generateWebAiResponse(userMessage, session) {
+async function generateWebAiResponse(userMessage) {
   const prompt = `Bạn là Chuyên viên Tư vấn Trực tuyến của SmileX Web Việt Nam (web.smilex.vn).
 Bạn là người thật, tận tâm, chuyên nghiệp và am hiểu sâu sắc về dịch vụ làm website. Tuyệt đối KHÔNG xưng là "AI", "bot" hay "trợ lý ảo".
 
 Thông tin cốt lõi về Dịch Vụ Thiết Kế Website 1 Triệu của SmileX Web:
 1. Giá trọn gói: Đúng 1.000.000đ (KHÔNG phát sinh chi phí thiết kế).
-2. Tốc độ bàn giao: 24 - 48 giờ có ngay bản web demo hoàn chỉnh.
+2. Tốc độ bàn giao: 24 - 48 giờ có ngay bản web hoàn chỉnh.
 3. Miễn phí Hosting vĩnh viễn (0đ/năm): Website chạy trên nền tảng Serverless Cloudflare & Vercel siêu tốc, bảo mật SSL tuyệt đối.
 4. Chuẩn SEO Google 100%, hiển thị hoàn hảo trên điện thoại, máy tính bảng, PC.
 5. Đầy đủ tính năng: Tích hợp Google Maps, Form nhận thông tin khách hàng, Tích hợp Live Chat, Nút gọi/nhắn tin, Kết nối Fanpage/Mạng xã hội.
@@ -103,128 +107,154 @@ export default async function handler(req, res) {
 
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // TELEGRAM WEBHOOK INCOMING (Distinguish from client chat POST)
+  // 1. INCOMING TELEGRAM WEBHOOK
   if (req.method === 'POST' && req.body && req.body.update_id && typeof req.body.message === 'object') {
     const tgMsg = req.body.message;
-    const threadId = tgMsg.message_thread_id;
+    const chatId = String(tgMsg.chat?.id || '');
     const text = tgMsg.text;
 
-    if (threadId && text) {
-      for (const [sId, sess] of Object.entries(global._webChatSessions)) {
-        if (sess.threadId === threadId) {
-          sess.messages.push({
-            id: 'tg_' + Date.now(),
-            sender: 'admin',
-            text: text,
-            timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
-          });
-          sess.aiPaused = true;
-          break;
+    // If message is from Bike Group (-1004298681574), forward to bike.smilex.vn
+    if (chatId.includes('1004298681574')) {
+      try {
+        await fetch('https://bike.smilex.vn/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(req.body)
+        });
+      } catch (e) {}
+      return res.status(200).json({ ok: true });
+    }
+
+    // Message from SmileX Web Group (-5228273937)
+    if (text && !tgMsg.from?.is_bot) {
+      let targetSessionId = null;
+
+      // Check if this is a reply to a bot message
+      if (tgMsg.reply_to_message) {
+        const replyMsgId = tgMsg.reply_to_message.message_id;
+        const mapping = await queryD1('SELECT session_id FROM telegram_msg_mapping WHERE tg_msg_id = ? LIMIT 1;', [replyMsgId]);
+        if (mapping && mapping.length > 0) {
+          targetSessionId = mapping[0].session_id;
         }
       }
+
+      // If not a reply, find the most recent active session
+      if (!targetSessionId) {
+        const recent = await queryD1('SELECT session_id FROM web_chat_messages ORDER BY created_at DESC LIMIT 1;');
+        if (recent && recent.length > 0) {
+          targetSessionId = recent[0].session_id;
+        }
+      }
+
+      if (targetSessionId) {
+        const msgId = 'admin_' + Date.now();
+        const timeStr = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+        await queryD1(
+          'INSERT INTO web_chat_messages (id, session_id, sender, text, timestamp) VALUES (?, ?, ?, ?, ?);',
+          [msgId, targetSessionId, 'admin', text, timeStr]
+        );
+      }
     }
+
     return res.status(200).json({ ok: true });
   }
 
+  // 2. CLIENT CHAT API REQUESTS
   const { action, sessionId, message, guestName, guestPhone } = req.body || req.query || {};
 
   if (!sessionId) {
     return res.status(400).json({ error: 'Thiếu sessionId' });
   }
 
-  if (!global._webChatSessions[sessionId]) {
-    global._webChatSessions[sessionId] = {
-      id: sessionId,
-      name: guestName || 'Khách Web',
-      phone: guestPhone || '',
-      threadId: null,
-      aiPaused: false,
-      createdAt: new Date(),
-      messages: [
+  // A. GET MESSAGES
+  if (action === 'get') {
+    const rows = await queryD1(
+      'SELECT id, sender, text, timestamp FROM web_chat_messages WHERE session_id = ? ORDER BY created_at ASC;',
+      [sessionId]
+    );
+
+    let messages = rows;
+    if (messages.length === 0) {
+      messages = [
         {
           id: 'welcome',
           sender: 'ai',
           text: '👋 Chào bạn! Mình là Chuyên viên Tư Vấn SmileX Web. Bạn đang cần thiết kế website cho lĩnh vực nào để mình gửi mẫu demo tham khảo nhé?',
           timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
         }
-      ]
-    };
-  }
+      ];
+    }
 
-  const session = global._webChatSessions[sessionId];
-  if (guestName) session.name = guestName;
-  if (guestPhone) session.phone = guestPhone;
-
-  // 1. GET MESSAGES
-  if (action === 'get') {
     return res.status(200).json({
       success: true,
-      messages: session.messages,
-      session: {
-        id: session.id,
-        name: session.name,
-        phone: session.phone
-      }
+      messages: messages
     });
   }
 
-  // 2. SEND MESSAGE
+  // B. SEND MESSAGE FROM CLIENT
   if (action === 'send' && message) {
-    const userMsgObj = {
-      id: 'usr_' + Date.now(),
-      sender: 'user',
-      text: message,
-      timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
-    };
-    session.messages.push(userMsgObj);
+    const userMsgId = 'usr_' + Date.now();
+    const timeStr = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
 
-    // Sync to Telegram
-    try {
-      if (!session.threadId) {
-        const topicTitle = `🌐 ${session.name || 'Khách Web'} (${session.phone || 'Chưa SĐT'})`;
-        session.threadId = await createTelegramForumTopic(topicTitle);
-      }
+    // Save user message to D1
+    await queryD1(
+      'INSERT INTO web_chat_messages (id, session_id, sender, text, timestamp) VALUES (?, ?, ?, ?, ?);',
+      [userMsgId, sessionId, 'user', message, timeStr]
+    );
 
-      await sendTelegramMessage(
-        TELEGRAM_GROUP_ID,
-        `<b>💬 Khách [${session.name || 'Khách Web'} ${session.phone ? '• ' + session.phone : ''}]:</b>\n${message}`,
-        session.threadId || null
+    // Send notification to Telegram group
+    const senderTitle = guestName ? `${guestName} (${guestPhone || 'Web'})` : 'Khách Web';
+    const tgRes = await sendTelegramMessage(
+      TELEGRAM_GROUP_ID,
+      `<b>💬 Khách [${senderTitle}]:</b>\n${message}`
+    );
+
+    if (tgRes && tgRes.result && tgRes.result.message_id) {
+      await queryD1(
+        'INSERT OR REPLACE INTO telegram_msg_mapping (tg_msg_id, session_id, site) VALUES (?, ?, ?);',
+        [tgRes.result.message_id, sessionId, 'web']
       );
-    } catch (err) {
-      console.error(err);
     }
 
-    // AI Specialist response if not paused by admin
-    if (!session.aiPaused) {
-      try {
-        const aiReplyText = await generateWebAiResponse(message, session);
-        const aiMsgObj = {
-          id: 'ai_' + Date.now(),
-          sender: 'ai',
-          text: aiReplyText,
-          timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
-        };
-        session.messages.push(aiMsgObj);
+    // Generate AI response
+    try {
+      const aiReplyText = await generateWebAiResponse(message);
+      const aiMsgId = 'ai_' + Date.now();
+      await queryD1(
+        'INSERT INTO web_chat_messages (id, session_id, sender, text, timestamp) VALUES (?, ?, ?, ?, ?);',
+        [aiMsgId, sessionId, 'ai', aiReplyText, timeStr]
+      );
 
-        await sendTelegramMessage(
-          TELEGRAM_GROUP_ID,
-          `<b>🤖 Tư Vấn SmileX:</b>\n${aiReplyText}`,
-          session.threadId || null
+      // Send AI response to Telegram as well
+      const aiTgRes = await sendTelegramMessage(
+        TELEGRAM_GROUP_ID,
+        `<b>🤖 Tư Vấn SmileX:</b>\n${aiReplyText}`
+      );
+      if (aiTgRes && aiTgRes.result && aiTgRes.result.message_id) {
+        await queryD1(
+          'INSERT OR REPLACE INTO telegram_msg_mapping (tg_msg_id, session_id, site) VALUES (?, ?, ?);',
+          [aiTgRes.result.message_id, sessionId, 'web']
         );
-      } catch (e) {
-        console.error('AI Reply error:', e);
       }
+    } catch (e) {
+      console.error('AI Error:', e);
     }
+
+    // Return updated messages
+    const updatedRows = await queryD1(
+      'SELECT id, sender, text, timestamp FROM web_chat_messages WHERE session_id = ? ORDER BY created_at ASC;',
+      [sessionId]
+    );
 
     return res.status(200).json({
       success: true,
-      messages: session.messages
+      messages: updatedRows
     });
   }
 
-  // 3. RESET CHAT
+  // C. RESET CHAT
   if (action === 'reset') {
-    delete global._webChatSessions[sessionId];
+    await queryD1('DELETE FROM web_chat_messages WHERE session_id = ?;', [sessionId]);
     return res.status(200).json({ success: true });
   }
 
