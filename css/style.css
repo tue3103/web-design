@@ -13,8 +13,8 @@
   --border-card: rgba(255, 255, 255, 0.1);
   --text-main: #f8fafc;
   --text-muted: #94a3b8;
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-heading: 'Outfit', sans-serif;
+  --font-sans: 'Plus Jakarta Sans', 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-heading: 'Be Vietnam Pro', 'Plus Jakarta Sans', -apple-system, sans-serif;
 }
 
 * {
@@ -162,9 +162,9 @@ body {
 }
 .hero-title {
   font-family: var(--font-heading);
-  font-size: clamp(32px, 5.5vw, 56px);
+  font-size: clamp(32px, 5.5vw, 54px);
   font-weight: 900;
-  line-height: 1.15;
+  line-height: 1.25;
   margin-bottom: 20px;
   color: #ffffff;
 }
@@ -275,6 +275,7 @@ body {
   font-family: var(--font-heading);
   font-size: 34px;
   font-weight: 800;
+  line-height: 1.3;
   color: #fff;
 }
 .section-desc {
