@@ -47,6 +47,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/chat.css">
 </head>
 <body>
 
@@ -155,8 +156,8 @@
 
         <div class="feature-card">
           <div class="feature-icon">💬</div>
-          <div class="feature-title">Tích Hợp Zalo, Hotline & Maps</div>
-          <div class="feature-desc">Nút gọi điện thoại 1 chạm, chat Zalo, Messenger, form để lại số điện thoại và định vị chỉ đường Google Maps.</div>
+          <div class="feature-title">Tích Hợp Live Chat, Form & Maps</div>
+          <div class="feature-desc">Khung Live Chat trực tuyến 24/7, form nhận thông tin khách tự động và định vị chỉ đường Google Maps.</div>
         </div>
       </div>
     </div>
@@ -360,7 +361,7 @@
       <div class="section-header">
         <span class="section-tag">ĐĂNG KÝ NGAY</span>
         <h2 class="section-title">Nhận Ưu Đãi Làm Web 1 Triệu Hôm Nay</h2>
-        <p class="section-desc">Điền thông tin bên dưới, chuyên viên SmileX Web sẽ liên hệ tư vấn và gửi mẫu web phù hợp ngay qua Zalo!</p>
+        <p class="section-desc">Điền thông tin bên dưới, chuyên viên SmileX Web sẽ tư vấn trực tiếp và gửi mẫu demo phù hợp ngay qua khung chat!</p>
       </div>
 
       <div class="order-form-box">
@@ -372,7 +373,7 @@
 
           <div class="form-group">
             <label class="form-label">Số điện thoại / Zalo nhận demo:</label>
-            <input type="text" id="orderPhone" class="form-input" placeholder="Ví dụ: 0979820789" required>
+            <input type="text" id="orderPhone" class="form-input" placeholder="Ví dụ: 0988..." required>
           </div>
 
           <div class="form-group">
@@ -391,11 +392,11 @@
 
           <div class="form-group">
             <label class="form-label">Ghi chú hoặc yêu cầu thêm (nếu có):</label>
-            <input type="text" id="orderNote" class="form-input" placeholder="Ví dụ: Cần tích hợp nút Zalo và Google Maps...">
+            <input type="text" id="orderNote" class="form-input" placeholder="Ví dụ: Cần tích hợp nút Chat và Google Maps...">
           </div>
 
           <button type="submit" class="btn-cta-primary" style="width:100%; justify-content:center; margin-top:12px;">
-            🚀 Gửi Đăng Ký Nhận Demo Ngay (Qua Zalo)
+            🚀 Gửi Đăng Ký & Nhận Demo Ngay (Qua Live Chat)
           </button>
         </form>
       </div>
@@ -434,24 +435,53 @@
     <div class="container">
       <div style="font-family:var(--font-heading); font-size:22px; font-weight:800; margin-bottom:8px;">SmileX Web Việt Nam</div>
       <p class="footer-text">Dịch vụ thiết kế website 1 triệu chuẩn SEO, uy tín hàng đầu toàn quốc.</p>
-      <p class="footer-text" style="margin-top:6px;">📍 Trụ sở: Pleiku, Gia Lai • 📞 Hotline / Zalo: 0979.820.789 • 🌐 Website: web.smilex.vn</p>
+      <p class="footer-text" style="margin-top:6px;">📍 Trụ sở: Pleiku, Gia Lai • 💬 Hỗ trợ trực tuyến 24/7 qua Live Chat • 🌐 Website: web.smilex.vn</p>
       <p class="footer-text" style="margin-top:12px; opacity:0.5;">© 2026 SmileX Web. All rights reserved.</p>
     </div>
   </footer>
 
   <!-- FLOATING ACTION BUTTONS -->
   <div class="floating-bar">
-    <a href="https://zalo.me/0979820789" class="float-btn zalo" target="_blank">
-      <span>💬</span> Chat Zalo
-    </a>
+    <button type="button" class="float-btn zalo" onclick="toggleChat()" style="border:none; cursor:pointer; background:linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);">
+      <span>💬</span> Nhắn Tư Vấn 24/7
+    </button>
     <a href="#order" class="float-btn order">
       <span>⚡</span> Đặt Làm Web 1Tr
     </a>
-    <a href="tel:0979820789" class="float-btn call">
-      <span>📞</span> 0979.820.789
-    </a>
   </div>
 
+  <!-- LIVE CHAT LAUNCHER BUTTON -->
+  <button class="chat-launcher-btn" id="chatLauncher" onclick="toggleChat()" title="Nhắn tư vấn trực tiếp 24/7">
+    <span>💬</span>
+    <span class="chat-badge-pulse"></span>
+  </button>
+
+  <!-- LIVE CHAT MODAL WINDOW -->
+  <div class="chat-window" id="chatWindow">
+    <div class="chat-header">
+      <div class="chat-header-info">
+        <div class="chat-avatar">🌐</div>
+        <div>
+          <div class="chat-header-title">SmileX Web Concierge</div>
+          <div class="chat-header-status">
+            <span class="status-dot"></span> Đang trực tuyến • Bàn giao 24H
+          </div>
+        </div>
+      </div>
+      <button class="chat-close-btn" onclick="toggleChat()">✕</button>
+    </div>
+
+    <div class="chat-messages" id="chatMessages">
+      <!-- Rendered by chat.js -->
+    </div>
+
+    <form class="chat-input-area" onsubmit="handleChatSubmit(event)">
+      <input type="text" id="chatInput" class="chat-input" placeholder="Nhập yêu cầu làm web của bạn..." autocomplete="off" required>
+      <button type="submit" class="chat-send-btn">➤</button>
+    </form>
+  </div>
+
+  <script src="/js/chat.js"></script>
   <script src="/js/app.js"></script>
 </body>
 </html>

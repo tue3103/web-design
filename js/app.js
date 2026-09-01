@@ -5,16 +5,25 @@
 
 function handleOrderSubmit(e) {
   e.preventDefault();
-  const name = document.getElementById('orderName').value;
-  const phone = document.getElementById('orderPhone').value;
+  const name = document.getElementById('orderName').value.trim();
+  const phone = document.getElementById('orderPhone').value.trim();
   const industry = document.getElementById('orderIndustry').value;
-  const note = document.getElementById('orderNote').value;
+  const note = document.getElementById('orderNote').value.trim();
 
-  const message = `Chào SmileX Web! Tôi muốn đăng ký làm Website 1 Triệu trọn gói:\n- Khách hàng: ${name}\n- Số điện thoại / Zalo: ${phone}\n- Lĩnh vực kinh doanh: ${industry}\n- Ghi chú / Yêu cầu thêm: ${note || 'Tư vấn mẫu giao diện phù hợp'}\nNhờ SmileX tư vấn và gửi demo giúp tôi!`;
+  localStorage.setItem('smilex_guest_name', name);
+  localStorage.setItem('smilex_guest_phone', phone);
 
-  // Redirect to Zalo Chat with prefilled text or hotline
-  const zaloUrl = `https://zalo.me/0979820789?text=${encodeURIComponent(message)}`;
-  window.open(zaloUrl, '_blank');
+  const message = `🚀 [ĐĂNG KÝ LÀM WEB 1 TRIỆU]\n- Khách hàng: ${name}\n- SĐT / Zalo: ${phone}\n- Lĩnh vực: ${industry}\n- Yêu cầu: ${note || 'Tư vấn mẫu giao diện phù hợp'}\nNhờ chuyên viên gửi demo và tư vấn giúp mình nhé!`;
+
+  // Open Live Chat and send message directly
+  if (typeof openChatWithMessage === 'function') {
+    openChatWithMessage(message, name, phone);
+  } else {
+    alert('Cảm ơn bạn! Chuyên viên SmileX Web sẽ phản hồi ngay qua khung chat trực tuyến.');
+  }
+
+  // Reset form
+  document.getElementById('orderNote').value = '';
 }
 
 document.addEventListener('DOMContentLoaded', () => {
