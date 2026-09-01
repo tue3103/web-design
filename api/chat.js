@@ -3,7 +3,7 @@
 // ==============================================================================
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8539622251:AAFAY3UlPj5X--2sjGwv0EtsxKUxF9GSLiU';
-const TELEGRAM_GROUP_ID = process.env.TELEGRAM_GROUP_ID || '-1004298681574';
+const TELEGRAM_GROUP_ID = process.env.TELEGRAM_GROUP_ID || '-5228273937';
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
 global._webChatSessions = global._webChatSessions || {};
@@ -42,10 +42,9 @@ async function createTelegramForumTopic(title) {
       })
     });
     const data = await res.json();
-    if (data.ok) return data.result.message_thread_id;
+    if (data.ok && data.result) return data.result.message_thread_id;
     return null;
   } catch (e) {
-    console.error('Create Forum Topic Error:', e);
     return null;
   }
 }
@@ -186,13 +185,11 @@ export default async function handler(req, res) {
         session.threadId = await createTelegramForumTopic(topicTitle);
       }
 
-      if (session.threadId) {
-        await sendTelegramMessage(
-          TELEGRAM_GROUP_ID,
-          `<b>💬 Khách [${session.name}]:</b>\n${message}`,
-          session.threadId
-        );
-      }
+      await sendTelegramMessage(
+        TELEGRAM_GROUP_ID,
+        `<b>💬 Khách [${session.name || 'Khách Web'} ${session.phone ? '• ' + session.phone : ''}]:</b>\n${message}`,
+        session.threadId || null
+      );
     } catch (err) {
       console.error(err);
     }
@@ -209,13 +206,11 @@ export default async function handler(req, res) {
         };
         session.messages.push(aiMsgObj);
 
-        if (session.threadId) {
-          await sendTelegramMessage(
-            TELEGRAM_GROUP_ID,
-            `<b>🤖 Tư Vấn SmileX:</b>\n${aiReplyText}`,
-            session.threadId
-          );
-        }
+        await sendTelegramMessage(
+          TELEGRAM_GROUP_ID,
+          `<b>🤖 Tư Vấn SmileX:</b>\n${aiReplyText}`,
+          session.threadId || null
+        );
       } catch (e) {
         console.error('AI Reply error:', e);
       }
