@@ -1,9 +1,9 @@
 // ==============================================================================
-// SMILEX WEB - 2-WAY LIVE CHAT API (CLOUDFLARE D1 PERSISTENCE & TELEGRAM)
+// SMILEX WEB - 2-WAY LIVE CHAT API (TELEGRAM TOPICS & CLOUDFLARE D1)
 // ==============================================================================
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8539622251:AAFAY3UlPj5X--2sjGwv0EtsxKUxF9GSLiU';
-const TELEGRAM_GROUP_ID = process.env.TELEGRAM_GROUP_ID || '-5228273937';
+const TELEGRAM_GROUP_ID = process.env.TELEGRAM_GROUP_ID || '-1004294427268';
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
 const D1_AUTH_TOKEN = process.env.CLOUDFLARE_D1_TOKEN || (['cfat_', 'AUm2HPlTMQGbIelmjQOJHCiNmI9ZvLXO6d2VqGbg2f29574c'].join(''));
@@ -31,15 +31,15 @@ async function queryD1(sql, params = []) {
   }
 }
 
-async function sendTelegramMessage(chatId, text, replyToMessageId = null) {
+async function sendTelegramMessage(chatId, text, messageThreadId = null) {
   try {
     const body = {
       chat_id: chatId,
       text: text,
       parse_mode: 'HTML'
     };
-    if (replyToMessageId) {
-      body.reply_to_message_id = replyToMessageId;
+    if (messageThreadId) {
+      body.message_thread_id = messageThreadId;
     }
     const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
       method: 'POST',
@@ -49,6 +49,25 @@ async function sendTelegramMessage(chatId, text, replyToMessageId = null) {
     return await res.json();
   } catch (err) {
     console.error('Telegram Send Error:', err);
+    return null;
+  }
+}
+
+async function createTelegramForumTopic(title) {
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/createForumTopic`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: TELEGRAM_GROUP_ID,
+        name: title
+      })
+    });
+    const data = await res.json();
+    if (data.ok && data.result) return data.result.message_thread_id;
+    return null;
+  } catch (e) {
+    console.error('Create Forum Topic Error:', e);
     return null;
   }
 }
@@ -107,10 +126,11 @@ export default async function handler(req, res) {
 
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // 1. INCOMING TELEGRAM WEBHOOK
+  // 1. INCOMING TELEGRAM WEBHOOK (Admin replies in Topic)
   if (req.method === 'POST' && req.body && req.body.update_id && typeof req.body.message === 'object') {
     const tgMsg = req.body.message;
     const chatId = String(tgMsg.chat?.id || '');
+    const threadId = tgMsg.message_thread_id;
     const text = tgMsg.text;
 
     // If message is from Bike Group (-1004298681574), forward to bike.smilex.vn
@@ -125,12 +145,20 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
-    // Message from SmileX Web Group (-5228273937)
+    // Message from SmileX Web Group (-1004294427268)
     if (text && !tgMsg.from?.is_bot) {
       let targetSessionId = null;
 
-      // Check if this is a reply to a bot message
-      if (tgMsg.reply_to_message) {
+      // Check by thread_id first
+      if (threadId) {
+        const rows = await queryD1('SELECT session_id FROM web_chat_sessions WHERE thread_id = ? LIMIT 1;', [threadId]);
+        if (rows && rows.length > 0) {
+          targetSessionId = rows[0].session_id;
+        }
+      }
+
+      // Check by reply_to_message mapping
+      if (!targetSessionId && tgMsg.reply_to_message) {
         const replyMsgId = tgMsg.reply_to_message.message_id;
         const mapping = await queryD1('SELECT session_id FROM telegram_msg_mapping WHERE tg_msg_id = ? LIMIT 1;', [replyMsgId]);
         if (mapping && mapping.length > 0) {
@@ -138,7 +166,7 @@ export default async function handler(req, res) {
         }
       }
 
-      // If not a reply, find the most recent active session
+      // Fallback: most recent active session
       if (!targetSessionId) {
         const recent = await queryD1('SELECT session_id FROM web_chat_messages ORDER BY created_at DESC LIMIT 1;');
         if (recent && recent.length > 0) {
@@ -196,17 +224,32 @@ export default async function handler(req, res) {
     const userMsgId = 'usr_' + Date.now();
     const timeStr = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
 
-    // Save user message to D1
+    // 1. Ensure Session & Forum Topic in Telegram
+    let threadId = null;
+    const sessRows = await queryD1('SELECT thread_id FROM web_chat_sessions WHERE session_id = ? LIMIT 1;', [sessionId]);
+    if (sessRows && sessRows.length > 0 && sessRows[0].thread_id) {
+      threadId = sessRows[0].thread_id;
+    } else {
+      const topicName = `🌐 ${guestName || 'Khách Web'} (${guestPhone || sessionId.slice(-4)})`;
+      threadId = await createTelegramForumTopic(topicName);
+      await queryD1(
+        'INSERT OR REPLACE INTO web_chat_sessions (session_id, thread_id, name, phone) VALUES (?, ?, ?, ?);',
+        [sessionId, threadId, guestName || 'Khách Web', guestPhone || '']
+      );
+    }
+
+    // 2. Save user message to D1
     await queryD1(
       'INSERT INTO web_chat_messages (id, session_id, sender, text, timestamp) VALUES (?, ?, ?, ?, ?);',
       [userMsgId, sessionId, 'user', message, timeStr]
     );
 
-    // Send notification to Telegram group
+    // 3. Send notification to Telegram Topic
     const senderTitle = guestName ? `${guestName} (${guestPhone || 'Web'})` : 'Khách Web';
     const tgRes = await sendTelegramMessage(
       TELEGRAM_GROUP_ID,
-      `<b>💬 Khách [${senderTitle}]:</b>\n${message}`
+      `<b>💬 Khách [${senderTitle}]:</b>\n${message}`,
+      threadId
     );
 
     if (tgRes && tgRes.result && tgRes.result.message_id) {
@@ -216,7 +259,7 @@ export default async function handler(req, res) {
       );
     }
 
-    // Generate AI response
+    // 4. Generate AI response
     try {
       const aiReplyText = await generateWebAiResponse(message);
       const aiMsgId = 'ai_' + Date.now();
@@ -225,10 +268,11 @@ export default async function handler(req, res) {
         [aiMsgId, sessionId, 'ai', aiReplyText, timeStr]
       );
 
-      // Send AI response to Telegram as well
+      // Send AI response to Telegram topic
       const aiTgRes = await sendTelegramMessage(
         TELEGRAM_GROUP_ID,
-        `<b>🤖 Tư Vấn SmileX:</b>\n${aiReplyText}`
+        `<b>🤖 Tư Vấn SmileX:</b>\n${aiReplyText}`,
+        threadId
       );
       if (aiTgRes && aiTgRes.result && aiTgRes.result.message_id) {
         await queryD1(
