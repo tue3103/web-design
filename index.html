@@ -47,7 +47,6 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,600&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/style.css">
-  <link rel="stylesheet" href="/css/chat.css">
 </head>
 <body>
 
@@ -464,38 +463,15 @@
     </a>
   </div>
 
-  <!-- LIVE CHAT LAUNCHER BUTTON -->
-  <button class="chat-launcher-btn" id="chatLauncher" onclick="toggleChat()" title="Nhắn tư vấn trực tiếp 24/7">
-    <span>💬</span>
-    <span class="chat-badge-pulse"></span>
-  </button>
-
-  <!-- LIVE CHAT MODAL WINDOW -->
-  <div class="chat-window" id="chatWindow">
-    <div class="chat-header">
-      <div class="chat-header-info">
-        <div class="chat-avatar">🌐</div>
-        <div>
-          <div class="chat-header-title">SmileX Web Concierge</div>
-          <div class="chat-header-status">
-            <span class="status-dot"></span> Đang trực tuyến • Bàn giao 24H
-          </div>
-        </div>
-      </div>
-      <button class="chat-close-btn" onclick="toggleChat()">✕</button>
-    </div>
-
-    <div class="chat-messages" id="chatMessages">
-      <!-- Rendered by chat.js -->
-    </div>
-
-    <form class="chat-input-area" onsubmit="handleChatSubmit(event)">
-      <input type="text" id="chatInput" class="chat-input" placeholder="Nhập yêu cầu làm web của bạn..." autocomplete="off" required>
-      <button type="submit" class="chat-send-btn">➤</button>
-    </form>
-  </div>
-
-  <script src="/js/chat.js"></script>
   <script src="/js/app.js"></script>
+
+  <!-- SmileX Universal Chat Hub (Centralized at chat.smilex.vn) -->
+  <script src="https://chat.smilex.vn/widget.js" 
+          data-site="web" 
+          data-name="SmileX Web Concierge" 
+          data-color="#6366f1" 
+          data-avatar="🌐" 
+          data-group="-1004294427268" 
+          data-welcome="👋 Chào bạn! Cảm ơn bạn đã ghé thăm SmileX Web. Bạn đang cần thiết kế website giới thiệu, bán hàng hay ứng dụng web chuyên nghiệp?"></script>
 </body>
 </html>
